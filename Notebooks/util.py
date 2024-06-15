@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -6,6 +12,11 @@ import keras.backend as K
 from keras.optimizers import Adam
 import os
 from IPython.display import display
+get_ipython().run_line_magic('autosave', '5')
+
+
+# In[2]:
+
 
 def loadData(dataset,split=0):
     if(split == 0):
@@ -17,11 +28,13 @@ def loadData(dataset,split=0):
         return tf.keras.preprocessing.image_dataset_from_directory(f"../Data/{dataset}",
                                                                    labels='inferred',shuffle=True,seed=51,
                                                             validation_split=split,subset='both')
-    
 
-#from https://aakashgoel12.medium.com/how-to-add-user-defined-function-get-f1-score-in-keras-metrics-3013f979ce0d
+
+# In[3]:
+
+
 def f1_score(y_true, y_pred): #taken from old keras source code 
-    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    true_positives = K.sum(y_true*y_pred)
     possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
     predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
     precision = true_positives / (predicted_positives + K.epsilon())
@@ -29,7 +42,11 @@ def f1_score(y_true, y_pred): #taken from old keras source code
     f1_val = 2*(precision*recall)/(precision+recall+K.epsilon())
     return f1_val
 
-def createModel(convFilters, convAndPoolLayers,numberOfFCLayers, numberOfNeuronsPerFCLayer, dropoutRate):
+
+# In[4]:
+
+
+def createModel(convFilters, convAndPoolLayers,numberOfFCLayers, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate):
     model = keras.Sequential()
         
     for convAndPoolLayer in range(convAndPoolLayers):
@@ -44,12 +61,17 @@ def createModel(convFilters, convAndPoolLayers,numberOfFCLayers, numberOfNeurons
         else:
             model.add(keras.layers.Dense(numberOfNeuronsPerFCLayer,activation='relu'))
             model.add(keras.layers.Dropout(dropoutRate))
-             
-    model.compile(optimizer="adam",loss='binary_crossentropy', metrics=f1_score)
+            
+    adamOptimizer = keras.optimizers.legacy.Adam(learning_rate=adamLearningRate)       
+    model.compile(optimizer="adam",loss=f1_loss, metrics=f1_score)
     return model
 
+
+# In[5]:
+
+
 def createModelParametersDF(n_convFilters,n_convAndPoolLayers,
-                            n_FCLayers,n_NeuronsPerFCLayers,n_Epochs,dropoutRates,trainScores,devScores):
+                            n_FCLayers,n_NeuronsPerFCLayers,n_Epochs,dropoutRates,adamLearningRates,trainScores,devScores):
     modelParameters = dict()
     modelParameters['n_convFilters'] = n_convFilters
     modelParameters['n_convAndPoolLayers'] = n_convAndPoolLayers
@@ -57,11 +79,16 @@ def createModelParametersDF(n_convFilters,n_convAndPoolLayers,
     modelParameters['n_NeuronsPerFCLayers'] = n_NeuronsPerFCLayers
     modelParameters['n_Epochs'] = n_Epochs
     modelParameters['dropoutRate'] = dropoutRates
+    modelParameters['adamLearningRates'] = adamLearningRates
     modelParameters['trainScore'] = trainScores
     modelParameters['devScore'] = devScores
 
     modelParametersDF = pd.DataFrame(modelParameters, columns=modelParameters.keys())
     return modelParametersDF
+
+
+# In[6]:
+
 
 def createRangeFromMidpoint(midpoint,range,mandatoryMinimum=1):
     possibleMin = int(midpoint-(range/2))
@@ -69,3 +96,132 @@ def createRangeFromMidpoint(midpoint,range,mandatoryMinimum=1):
     possibleMax = int(midpoint+(range/2))
     possibleRange = np.arange(possibleMin,possibleMax)
     return possibleRange
+
+
+# In[7]:
+
+
+def f1_loss(y_true,y_pred):
+    y_true = tf.cast(y_true, tf.float32)
+    y_pred = tf.cast(y_pred, tf.float32)
+    y_true = K.flatten(y_true)
+    y_pred = K.flatten(y_pred)
+
+    tp = K.sum(y_true * y_pred)
+    fp = K.sum((1 - y_true) * y_pred)
+    fn = K.sum(y_true * (1 - y_pred))
+
+    precision = tp / (tp + fp + K.epsilon())
+    recall = tp / (tp + fn + K.epsilon())
+    
+    f1 = 2 * precision * recall / (precision + recall + K.epsilon())
+    return 1 - f1
+
+
+# In[8]:
+
+
+def generateAdamLearningRate(lastBestLearningRate=None):
+    learningRatePower = np.random.random() * (-2 + 4) - 4
+    learningRate = np.power(10,learningRatePower)
+    if lastBestLearningRate != None:
+        learningRate = (learningRate + lastBestLearningRate) / 2
+    return learningRate
+
+
+# In[9]:
+
+
+def main():
+    train = loadData("training")
+    dev,test = loadData("testing",.5)
+
+    choose = np.random.choice
+
+    possibleConvFilters = createRangeFromMidpoint(32,64)
+
+    possibleConvAndPoolLayers = createRangeFromMidpoint(3,6)
+
+    possibleNumberOfFCLayers = createRangeFromMidpoint(5,10)
+    possibleNumberOfNeuronsPerFCLayer = createRangeFromMidpoint(5,10)
+
+    possibleNumberOfEpochs = createRangeFromMidpoint(5,10)
+    trial = 0
+    
+    
+    n_convFilters = []
+    n_convAndPoolLayers = []
+    n_FCLayers = []
+    n_NeuronsPerFCLayers = []
+    n_Epochs = []
+    dropoutRates = []
+    adamLearningRates = []
+    trainScores = []
+    devScores = []
+    
+    lastTrialForNotebook = trial + 10
+    
+    while trial < lastTrialForNotebook:
+        convFilters = choose(possibleConvFilters)
+
+        convAndPoolLayers = choose(possibleConvAndPoolLayers)
+        convAndPoolLayers = min([convAndPoolLayers,6])
+
+        numberOfFCLayers = choose(possibleNumberOfFCLayers)
+        numberOfNeuronsPerFCLayer = choose(possibleNumberOfNeuronsPerFCLayer)
+
+        numberOfEpochs = choose(possibleNumberOfEpochs)
+        
+        dropoutRate = np.random.rand()
+        adamLearningRate = generateAdamLearningRate()
+
+        model = createModel(convFilters, convAndPoolLayers,numberOfFCLayers, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate)
+    
+        model.fit(train,epochs=numberOfEpochs,verbose=0)
+
+        model_path = f'../Models/FlipDetectionModelTrials/fd_model_{trial}.h5'
+        model.save(model_path)
+        model_size = os.path.getsize(model_path) / (1024 * 1024)
+        if model_size < 40:
+            print()
+            print('trainScore')
+            trainScore = model.evaluate(train)[1]
+            print('devScore')
+            devScore = model.evaluate(dev)[1]
+
+            n_convFilters.append(convFilters)
+            n_convAndPoolLayers.append(convAndPoolLayers)
+            n_FCLayers.append(numberOfFCLayers)
+            n_NeuronsPerFCLayers.append(numberOfNeuronsPerFCLayer)
+            n_Epochs.append(numberOfEpochs)
+            dropoutRates.append(dropoutRate)
+            trainScores.append(trainScore)
+            devScores.append(devScore)
+            adamLearningRates.append(adamLearningRate)
+            print('concluding trial ',trial)
+            trial += 1
+        else:
+            print(f'redoing trial {trial}. Model was {model_size}MB.')
+            failedTrial = createModelParametersDF([convFilters],[convAndPoolLayers],
+                                               [numberOfFCLayers],[numberOfNeuronsPerFCLayer],[numberOfEpochs],[dropoutRate],[adamLearningRate],[np.nan],[np.nan])
+            display(failedTrial)
+            
+    modelParametersDF = createModelParametersDF(n_convFilters,n_convAndPoolLayers,
+                                                n_FCLayers,n_NeuronsPerFCLayers,n_Epochs,dropoutRates,adamLearningRates,trainScores,devScores)
+    display(modelParametersDF.sort_values(by='trainScore', ascending=False))
+        
+    
+    
+
+
+# In[10]:
+
+
+main()
+
+
+# In[ ]:
+
+
+
+
