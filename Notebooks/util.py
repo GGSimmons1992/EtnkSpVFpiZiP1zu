@@ -46,13 +46,21 @@ def f1_score(y_true, y_pred): #taken from old keras source code
 # In[4]:
 
 
-def createModel(convFilters, convAndPoolLayers,numberOfFCLayers, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate,L2Rate):
+def createModel(convFilters1, convFilters2, convFilters3, convFilters4, numberOfFCLayers, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate,L2Rate):
     model = keras.Sequential()
         
-    for convAndPoolLayer in range(convAndPoolLayers):
-        model.add(keras.layers.Conv2D(convFilters,(3,3), activation='relu',padding='valid'))
-        model.add(keras.layers.MaxPooling2D(pool_size=(2,2), padding='valid'))
-        
+    #convPool1
+    model.add(keras.layers.Conv2D(convFilters1,(3,3), activation='relu',padding='valid'))
+    model.add(keras.layers.MaxPooling2D(pool_size=(2,2), padding='valid'))
+    #convPool2
+    model.add(keras.layers.Conv2D(convFilters2,(3,3), activation='relu',padding='valid'))
+    model.add(keras.layers.MaxPooling2D(pool_size=(2,2), padding='valid'))
+    #convPool3
+    model.add(keras.layers.Conv2D(convFilters3,(3,3), activation='relu',padding='valid'))
+    model.add(keras.layers.MaxPooling2D(pool_size=(2,2), padding='valid'))
+    #finalConv
+    model.add(keras.layers.Conv2D(convFilters4,(3,3), activation='relu',padding='valid'))
+    
     model.add(keras.layers.Flatten())
     
     for layer in range(numberOfFCLayers):
@@ -70,12 +78,14 @@ def createModel(convFilters, convAndPoolLayers,numberOfFCLayers, numberOfNeurons
 # In[5]:
 
 
-def createModelParametersDF(n_convFilters,n_convAndPoolLayers,
+def createModelParametersDF(n_convFilters1,n_convFilters2,n_convFilters3,n_convFilters4,
                             n_FCLayers,n_NeuronsPerFCLayers,n_Epochs,
                             dropoutRates,adamLearningRates,L2Rates,trainScores,devScores):
     modelParameters = dict()
-    modelParameters['n_convFilters'] = n_convFilters
-    modelParameters['n_convAndPoolLayers'] = n_convAndPoolLayers
+    modelParameters['n_convFilters1'] = n_convFilters1
+    modelParameters['n_convFilters2'] = n_convFilters2
+    modelParameters['n_convFilters3'] = n_convFilters3
+    modelParameters['n_convFilters4'] = n_convFilters4
     modelParameters['n_FCLayers'] = n_FCLayers
     modelParameters['n_NeuronsPerFCLayers'] = n_NeuronsPerFCLayers
     modelParameters['n_Epochs'] = n_Epochs
@@ -123,38 +133,74 @@ def f1_loss(y_true,y_pred):
 # In[8]:
 
 
-def generateAdamLearningRate(lastBestLearningRate=None):
-    learningRatePower = np.random.random() * (-2 + 4) - 4
-    learningRate = np.power(10,learningRatePower)
-    if lastBestLearningRate != None:
-        learningRate = (learningRate + lastBestLearningRate) / 2
-    return learningRate
+def generateDropoutRate(minVal=0,maxVal=1):
+    dropoutRate = np.random.random() * (maxVal - minVal) + minVal
+    dropoutRate = np.max([dropoutRate,0])
+    dropoutRate = np.min([dropoutRate,0.999])
+    return dropoutRate
 
 
 # In[9]:
 
 
-def generateL2(lastBestL2=None):
-    l2Power = np.random.random() * (3 + 2) - 2
-    l2 = np.power(10,l2Power)
-    if lastBestL2 != None:
-        l2 = (l2 + lastBestL2) / 2
-    return l2
+def generateAdamLearningRate(minVal=1e-4,maxVal=1e-2):
+    minVal = np.log10(minVal)
+    maxVal = np.log10(maxVal)
+    learningRatePower = np.random.random() * (maxVal - minVal) + minVal
+    learningRate = np.power(10,learningRatePower)
+    return learningRate
 
 
 # In[10]:
 
 
+def generateL2(minVal=1e-2,maxVal=1e3):
+    minVal = np.log10(minVal)
+    maxVal = np.log10(maxVal)
+    l2Power = np.random.random() * (maxVal - minVal) + minVal
+    l2 = np.power(10,l2Power)
+    return l2
+
+
+# In[11]:
+
+
+def calculateCriticalPoints(top5ParamList):
+    meanValue = np.mean(top5ParamList)
+    stdValue = np.std(top5ParamList)
+    lowPoint = meanValue - (3*stdValue)
+    highPoint = meanValue + (3*stdValue)
+    return (lowPoint,highPoint)
+
+
+# In[12]:
+
+
+def calculateLogisticCriticalPoints(top5ParamList):
+    top5Log10ParamList = np.log10(top5ParamList)
+    log10criticalPointTuple = calculateCriticalPoints(top5Log10ParamList)
+    criticalPointTuple = (np.power(10,log10criticalPointTuple[0]),np.power(10,log10criticalPointTuple[1]))
+    return criticalPointTuple
+
+
+# In[13]:
+
+
 def main():
 
-    possibleConvFilters = createRangeFromMidpoint(32,32)
-
-    possibleConvAndPoolLayers = createRangeFromMidpoint(3,6)
+    possibleConvFilters1 = createRangeFromMidpoint(32,32)
+    possibleConvFilters2 = createRangeFromMidpoint(32,32)
+    possibleConvFilters3 = createRangeFromMidpoint(32,32)
+    possibleConvFilters4 = createRangeFromMidpoint(32,32)
 
     possibleNumberOfFCLayers = createRangeFromMidpoint(16,16)
     possibleNumberOfNeuronsPerFCLayer = createRangeFromMidpoint(16,16)
 
     possibleNumberOfEpochs = createRangeFromMidpoint(20,20)
+    dropoutCriticalPoints = (0,1)
+    adamLearningRateCriticalPoints = (1e-4,1e-2)
+    L2CriticalPoints = (1e-2,1e3)    
+    
     trial = 0
     
     train = loadData("training")
@@ -162,8 +208,10 @@ def main():
 
     choose = np.random.choice
 
-    n_convFilters = []
-    n_convAndPoolLayers = []
+    n_convFilters1 = []
+    n_convFilters2 = []
+    n_convFilters3 = []
+    n_convFilters4 = []
     n_FCLayers = []
     n_NeuronsPerFCLayers = []
     n_Epochs = []
@@ -173,25 +221,24 @@ def main():
     trainScores = []
     devScores = []
     
-    lastTrialForNotebook = trial + 10
-    
-    while trial < lastTrialForNotebook:
-        convFilters = choose(possibleConvFilters)
-
-        convAndPoolLayers = choose(possibleConvAndPoolLayers)
-        convAndPoolLayers = min([convAndPoolLayers,6])
+    while trial < 50:
+        convFilters1 = choose(possibleConvFilters1)
+        convFilters2 = choose(possibleConvFilters2)
+        convFilters3 = choose(possibleConvFilters3)
+        convFilters4 = choose(possibleConvFilters4)
 
         numberOfFCLayers = choose(possibleNumberOfFCLayers)
         numberOfNeuronsPerFCLayer = choose(possibleNumberOfNeuronsPerFCLayer)
 
         numberOfEpochs = choose(possibleNumberOfEpochs)
         
-        dropoutRate = np.random.rand()
-        adamLearningRate = generateAdamLearningRate()
-        L2Rate = generateL2()
+        dropoutRate = generateDropoutRate(dropoutCriticalPoints[0],dropoutCriticalPoints[1])
+        adamLearningRate = generateAdamLearningRate(adamLearningRateCriticalPoints[0],adamLearningRateCriticalPoints[1])
+        L2Rate = generateL2(L2CriticalPoints[0],L2CriticalPoints[1])
         
 
-        model = createModel(convFilters, convAndPoolLayers,numberOfFCLayers, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate, L2Rate)
+        model = createModel(convFilters1, convFilters2, convFilters3, convFilters4,
+                            numberOfFCLayers, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate,L2Rate)
     
         model.fit(train,epochs=numberOfEpochs,verbose=0)
 
@@ -205,11 +252,15 @@ def main():
             print('devScore')
             devScore = model.evaluate(dev)[1]
 
-            n_convFilters.append(convFilters)
-            n_convAndPoolLayers.append(convAndPoolLayers)
+            n_convFilters1.append(convFilters1)
+            n_convFilters2.append(convFilters2)
+            n_convFilters3.append(convFilters3)
+            n_convFilters4.append(convFilters4)
+            
             n_FCLayers.append(numberOfFCLayers)
             n_NeuronsPerFCLayers.append(numberOfNeuronsPerFCLayer)
             n_Epochs.append(numberOfEpochs)
+            
             adamLearningRates.append(adamLearningRate)
             dropoutRates.append(dropoutRate)
             L2Rates.append(L2Rate)
@@ -220,24 +271,60 @@ def main():
             trial += 1
         else:
             print(f'redoing trial {trial}. Model was {model_size}MB.')
-            failedTrial = createModelParametersDF([convFilters],[convAndPoolLayers],
+            failedTrial = createModelParametersDF([convFilters1],[convFilters2],[convFilters3],[convFilters4],
                                                   [numberOfFCLayers],[numberOfNeuronsPerFCLayer],[numberOfEpochs],
                                                   [dropoutRate],[adamLearningRate],[L2Rate],[np.nan],[np.nan])
             display(failedTrial)
-            
-    modelParametersDF = createModelParametersDF(n_convFilters,n_convAndPoolLayers,
-                                                n_FCLayers,n_NeuronsPerFCLayers,n_Epochs,
-                                                dropoutRates,adamLearningRates,L2Rates,trainScores,devScores)
-    display(modelParametersDF.sort_values(by='trainScore', ascending=False))
         
-    
+            
+        if (trial % 10 == 9): 
+            modelParametersDF = createModelParametersDF(n_convFilters1,n_convFilters2,n_convFilters3,n_convFilters4,
+                                                    n_FCLayers,n_NeuronsPerFCLayers,n_Epochs,
+                                                    dropoutRates,adamLearningRates,L2Rates,trainScores,devScores)
+            modelParametersDF = modelParametersDF.sort_values(by='trainScore', ascending=False)
+            display(modelParametersDF)
+            
+            top5 = modelParametersDF[0:5]
+            possibleConvFilters1 = createRangeFromMidpoint(np.mean(top5['n_convFilters1']),6*np.std(top5['n_convFilters1']))
+            possibleConvFilters2 = createRangeFromMidpoint(np.mean(top5['n_convFilters2']),6*np.std(top5['n_convFilters2']))
+            possibleConvFilters3 = createRangeFromMidpoint(np.mean(top5['n_convFilters3']),6*np.std(top5['n_convFilters3']))
+            possibleConvFilters4 = createRangeFromMidpoint(np.mean(top5['n_convFilters4']),6*np.std(top5['n_convFilters4']))
+        
+            possibleNumberOfFCLayers = createRangeFromMidpoint(np.mean(top5['n_FCLayers']),6*np.std(top5['n_FCLayers']))
+            possibleNumberOfNeuronsPerFCLayer = createRangeFromMidpoint(np.mean(top5['n_NeuronsPerFCLayers']),6*np.std(top5['n_NeuronsPerFCLayers']))
+        
+            possibleNumberOfEpochs = createRangeFromMidpoint(np.mean(top5['n_Epochs']),6*np.std(top5['n_Epochs']))
+            dropoutCriticalPoints = calculateCriticalPoints(top5['dropoutRate'])
+            adamLearningRateCriticalPoints = calculateLogisticCriticalPoints(top5['adamLearningRates'])
+            L2CriticalPoints = calculateLogisticCriticalPoints(top5['L2Rates'])
+
+            n_convFilters1 = []
+            n_convFilters2 = []
+            n_convFilters3 = []
+            n_convFilters4 = []
+            n_FCLayers = []
+            n_NeuronsPerFCLayers = []
+            n_Epochs = []
+            dropoutRates = []
+            adamLearningRates = []
+            L2Rates = []
+            trainScores = []
+            devScores = []
+            
     
 
 
-# In[11]:
+# In[ ]:
+
 
 if __name__ == '__main__':
     main()
+
+
+# In[ ]:
+
+
+
 
 
 # In[ ]:
