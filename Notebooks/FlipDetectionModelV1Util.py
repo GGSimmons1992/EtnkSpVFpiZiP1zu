@@ -12,6 +12,9 @@ import keras.backend as K
 from keras.optimizers import Adam
 import os
 from IPython.display import display
+import json
+from os.path import exists
+
 get_ipython().run_line_magic('autosave', '5')
 
 
@@ -65,13 +68,13 @@ def createModel(convFilters1, convFilters2, convFilters3, convFilters4, numberOf
     
     for layer in range(numberOfFCLayers):
         if layer == numberOfFCLayers - 1:
-            model.add(keras.layers.Dense(1,activation='softmax'))
+            model.add(keras.layers.Dense(1,activation='sigmoid'))
         else:
             model.add(keras.layers.Dense(numberOfNeuronsPerFCLayer,activation='relu',kernel_regularizer=tf.keras.regularizers.l2(L2Rate)))
             model.add(keras.layers.Dropout(dropoutRate))
             
     adamOptimizer = keras.optimizers.legacy.Adam(learning_rate=adamLearningRate)       
-    model.compile(optimizer="adam",loss=f1_loss, metrics=f1_score)
+    model.compile(optimizer="adam",loss='binary_crossentropy', metrics=f1_score)
     return model
 
 
@@ -113,26 +116,6 @@ def createRangeFromMidpoint(midpoint,range,mandatoryMinimum=1):
 # In[7]:
 
 
-def f1_loss(y_true,y_pred):
-    y_true = tf.cast(y_true, tf.float32)
-    y_pred = tf.cast(y_pred, tf.float32)
-    y_true = K.flatten(y_true)
-    y_pred = K.flatten(y_pred)
-
-    tp = K.sum(y_true * y_pred)
-    fp = K.sum((1 - y_true) * y_pred)
-    fn = K.sum(y_true * (1 - y_pred))
-
-    precision = tp / (tp + fp + K.epsilon())
-    recall = tp / (tp + fn + K.epsilon())
-    
-    f1 = (2 * precision * recall) / (precision + recall + K.epsilon())
-    return 1 - f1
-
-
-# In[8]:
-
-
 def generateDropoutRate(minVal=0,maxVal=1):
     dropoutRate = np.random.random() * (maxVal - minVal) + minVal
     dropoutRate = np.max([dropoutRate,0])
@@ -140,7 +123,7 @@ def generateDropoutRate(minVal=0,maxVal=1):
     return dropoutRate
 
 
-# In[9]:
+# In[8]:
 
 
 def generateAdamLearningRate(minVal=1e-4,maxVal=1e-2):
@@ -151,7 +134,7 @@ def generateAdamLearningRate(minVal=1e-4,maxVal=1e-2):
     return learningRate
 
 
-# In[10]:
+# In[9]:
 
 
 def generateL2(minVal=1e-2,maxVal=1e3):
@@ -162,18 +145,16 @@ def generateL2(minVal=1e-2,maxVal=1e3):
     return l2
 
 
-# In[11]:
+# In[10]:
 
 
 def calculateCriticalPoints(top5ParamList):
-    meanValue = np.mean(top5ParamList)
-    stdValue = np.std(top5ParamList)
-    lowPoint = meanValue - (3*stdValue)
-    highPoint = meanValue + (3*stdValue)
+    lowPoint = np.min(top5ParamList)
+    highPoint = np.max(top5ParamList)
     return (lowPoint,highPoint)
 
 
-# In[12]:
+# In[11]:
 
 
 def calculateLogisticCriticalPoints(top5ParamList):
@@ -183,25 +164,53 @@ def calculateLogisticCriticalPoints(top5ParamList):
     return criticalPointTuple
 
 
+# In[12]:
+
+
+def getAdjustedRange(top5ParamList):
+    lowerValue = int(np.max([1,np.min(top5ParamList)]))
+    upperValue = int(np.max(top5ParamList))
+    
+    if lowerValue == upperValue:
+        return createRangeFromMidpoint(lowerValue,2*lowerValue)
+    return np.arange(lowerValue,upperValue)
+
+
 # In[13]:
+
+
+def displayFinalResults():
+    if (exists('../Models/best_fd_model_params.json')):
+        with open('../Models/best_fd_model_params.json') as d:
+            finalResults = json.load(d)
+            resultsDictionary = dict()
+            for key in finalResults.keys():
+                resultsDictionary[key] = [finalResults[key]]
+            resultsDF = pd.DataFrame(resultsDictionary,columns = finalResults.keys())
+            print('Final Model')
+            display(resultsDF)
+
+
+# In[14]:
 
 
 def main():
 
-    possibleConvFilters1 = createRangeFromMidpoint(32,32)
-    possibleConvFilters2 = createRangeFromMidpoint(32,32)
-    possibleConvFilters3 = createRangeFromMidpoint(32,32)
-    possibleConvFilters4 = createRangeFromMidpoint(32,32)
+    possibleConvFilters1 = createRangeFromMidpoint(32,64)
+    possibleConvFilters2 = createRangeFromMidpoint(32,64)
+    possibleConvFilters3 = createRangeFromMidpoint(32,64)
+    possibleConvFilters4 = createRangeFromMidpoint(32,64)
 
-    possibleNumberOfFCLayers = createRangeFromMidpoint(16,16)
-    possibleNumberOfNeuronsPerFCLayer = createRangeFromMidpoint(16,16)
+    possibleNumberOfFCLayers = createRangeFromMidpoint(10,20)
+    possibleNumberOfNeuronsPerFCLayer = createRangeFromMidpoint(10,20)
 
-    possibleNumberOfEpochs = createRangeFromMidpoint(20,20)
+    possibleNumberOfEpochs = createRangeFromMidpoint(10,20)
     dropoutCriticalPoints = (0,1)
     adamLearningRateCriticalPoints = (1e-4,1e-2)
     L2CriticalPoints = (1e-2,1e3)    
     
     trial = 0
+    bestDevScore = 0
     
     train = loadData("training")
     dev,test = loadData("testing",.5)
@@ -221,7 +230,7 @@ def main():
     trainScores = []
     devScores = []
     
-    while trial < 50:
+    while trial < 100:
         convFilters1 = choose(possibleConvFilters1)
         convFilters2 = choose(possibleConvFilters2)
         convFilters3 = choose(possibleConvFilters3)
@@ -251,6 +260,30 @@ def main():
             trainScore = model.evaluate(train)[1]
             print('devScore')
             devScore = model.evaluate(dev)[1]
+
+            if (devScore > 0.91) and (devScore > bestDevScore):
+                testScore = model.evaluate(test)[1]
+                model_path = f'../Models/best_fd_model_.h5'
+                model.save(model_path)
+                bestModelParams = {
+                    'n_convFilters1' : int(convFilters1),
+                    'n_convFilters2' : int(convFilters2),
+                    'n_convFilters3' : int(convFilters3),
+                    'n_convFilters4' : int(convFilters4),
+                    'n_FCLayers' : int(numberOfFCLayers),
+                    'n_NeuronsPerFCLayers' : int(numberOfNeuronsPerFCLayer),
+                    'n_Epochs' : int(numberOfEpochs),
+                    'dropoutRate' : dropoutRate,
+                    'adamLearningRates' : adamLearningRate,
+                    'L2Rates' : L2Rate,
+                    'modelSize' : model_size,
+                    'trainScore': trainScore,
+                    'devScore': devScore,
+                    'testScore': testScore
+                }
+                with open('../Models/best_fd_model_params.json', 'w') as f:
+                    json.dump(bestModelParams, f)
+                bestDevScore = devScore       
 
             n_convFilters1.append(convFilters1)
             n_convFilters2.append(convFilters2)
@@ -285,15 +318,15 @@ def main():
             display(modelParametersDF)
             
             top5 = modelParametersDF[0:5]
-            possibleConvFilters1 = createRangeFromMidpoint(np.mean(top5['n_convFilters1']),6*np.std(top5['n_convFilters1']))
-            possibleConvFilters2 = createRangeFromMidpoint(np.mean(top5['n_convFilters2']),6*np.std(top5['n_convFilters2']))
-            possibleConvFilters3 = createRangeFromMidpoint(np.mean(top5['n_convFilters3']),6*np.std(top5['n_convFilters3']))
-            possibleConvFilters4 = createRangeFromMidpoint(np.mean(top5['n_convFilters4']),6*np.std(top5['n_convFilters4']))
+            possibleConvFilters1 = getAdjustedRange(top5['n_convFilters1'])
+            possibleConvFilters2 = getAdjustedRange(top5['n_convFilters2'])
+            possibleConvFilters3 = getAdjustedRange(top5['n_convFilters3'])
+            possibleConvFilters4 = getAdjustedRange(top5['n_convFilters4'])
         
-            possibleNumberOfFCLayers = createRangeFromMidpoint(np.mean(top5['n_FCLayers']),6*np.std(top5['n_FCLayers']))
-            possibleNumberOfNeuronsPerFCLayer = createRangeFromMidpoint(np.mean(top5['n_NeuronsPerFCLayers']),6*np.std(top5['n_NeuronsPerFCLayers']))
+            possibleNumberOfFCLayers = getAdjustedRange(top5['n_FCLayers'])
+            possibleNumberOfNeuronsPerFCLayer = getAdjustedRange(top5['n_NeuronsPerFCLayers'])
         
-            possibleNumberOfEpochs = createRangeFromMidpoint(np.mean(top5['n_Epochs']),6*np.std(top5['n_Epochs']))
+            possibleNumberOfEpochs = getAdjustedRange(top5['n_Epochs'])
             dropoutCriticalPoints = calculateCriticalPoints(top5['dropoutRate'])
             adamLearningRateCriticalPoints = calculateLogisticCriticalPoints(top5['adamLearningRates'])
             L2CriticalPoints = calculateLogisticCriticalPoints(top5['L2Rates'])
@@ -310,12 +343,16 @@ def main():
             L2Rates = []
             trainScores = []
             devScores = []
+
+            if bestDevScore > 0.91:
+                trial = 101
+                
+    displayFinalResults()
             
     
 
 
-# In[ ]:
-
+# In[15]:
 
 if __name__ == '__main__':
     main()
