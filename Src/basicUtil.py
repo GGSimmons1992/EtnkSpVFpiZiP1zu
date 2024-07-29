@@ -179,9 +179,9 @@ def getAdjustedRange(top5ParamList):
 # In[13]:
 
 
-def displayFinalResults():
-    if (exists('../Models/best_fd_model_params.json')):
-        with open('../Models/best_fd_model_params.json') as d:
+def displayFinalResults(parameterFileName):
+    if (exists(parameterFileName)):
+        with open(parameterFileName) as d:
             finalResults = json.load(d)
             resultsDictionary = dict()
             for key in finalResults.keys():
@@ -347,7 +347,7 @@ def main():
             if bestDevScore > 0.91:
                 trial = 101
                 
-    displayFinalResults()
+    displayFinalResults('../Models/best_fd_model_params.json')
             
     
 
