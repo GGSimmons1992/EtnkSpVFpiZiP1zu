@@ -1,0 +1,1 @@
+{"n_NeuronsPerFCLayers": 1, "n_Epochs": 2, "dropoutRate": 0.9019283580578038, "adamLearningRates": 0.0005169751209386996, "L2Rates": 0.7003425160560004, "modelSize": 56.343902587890625, "trainScore": 0.9950941205024719, "devScore": 0.9950937032699585, "testScore": 0.9950937032699585}
