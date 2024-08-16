@@ -162,3 +162,7 @@ cython_debug/
 Data
 Models/FlipDetectionModelTrials
 Models/VGG16Trials
+Models/MobileNetTrials
+Models/ResnetTrials
+.DS_Store
+Src/.DS_Store
