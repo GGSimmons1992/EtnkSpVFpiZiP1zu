@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, "../Src/")
 import basicUtil
 
-get_ipython().run_line_magic('autosave', '5')
+
 
 
 # In[2]:

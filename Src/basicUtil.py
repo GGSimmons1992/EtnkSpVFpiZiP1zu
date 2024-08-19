@@ -15,7 +15,7 @@ from IPython.display import display
 import json
 from os.path import exists
 
-get_ipython().run_line_magic('autosave', '5')
+
 
 
 # In[2]:
