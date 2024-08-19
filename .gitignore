@@ -164,5 +164,6 @@ Models/FlipDetectionModelTrials
 Models/VGG16Trials
 Models/MobileNetTrials
 Models/ResnetTrials
+Models/EffecientNetTrials
 .DS_Store
 Src/.DS_Store
