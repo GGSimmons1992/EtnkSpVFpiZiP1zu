@@ -1,1 +1,1 @@
-{"n_NeuronsPerFCLayers": 22, "n_Epochs": 1, "dropoutRate": 0.6992889835256672, "adamLearningRates": 0.0012868253482288255, "L2Rates": 0.023008498438124306, "modelSize": 9.101432800292969, "trainScore": 0.983324408531189, "devScore": 0.9893182516098022, "testScore": 0.9942061305046082}
+{"n_NeuronsPerFCLayers": 9, "n_Epochs": 3, "adamLearningRates": 0.00010419895529701353, "L2Rates": 0.23297639078150653, "modelSize": 6.015419006347656, "trainScore": 0.997602105140686, "devScore": 0.9891812205314636, "testScore": 0.9913109540939331}

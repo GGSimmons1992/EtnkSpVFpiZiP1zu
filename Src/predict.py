@@ -17,7 +17,7 @@ imageShape = (180,180)
 inputShape = [imageShape[0],imageShape[1],3]
 
 with custom_object_scope({'f1_score':basicUtil.f1_score}):
-    model = keras.models.load_model('../Models/best_effecientnet_model_.h5')
+    model = keras.models.load_model('../Models/best_mobilenet_model_.h5')
 model.summary()
 
 def preprocess_image(image, imageShape=(180,180)):
@@ -33,7 +33,8 @@ def preprocess_image(image, imageShape=(180,180)):
 def flipDetector(image):
     processedImage = preprocess_image(image)
     result = model.predict(processedImage)
-    return result[0,0] > .5
+    print(result[0,0])
+    return "flipped" if (result[0,0] > .5) else "not flipped"
 
 def main():
 

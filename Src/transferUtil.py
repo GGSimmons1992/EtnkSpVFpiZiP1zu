@@ -24,7 +24,6 @@ import basicUtil
 
 
 
-
 # In[2]:
 
 
@@ -45,12 +44,11 @@ def loadDataWithResizeShape(dataset,resizeShape,split=0):
 # In[3]:
 
 
-def createTransferableModel(base_model, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate, L2Rate):
+def createTransferableModel(base_model, numberOfNeuronsPerFCLayer, adamLearningRate, L2Rate):
     model = keras.Sequential()
     model.add(base_model)
     model.add(keras.layers.Flatten())
     model.add(keras.layers.Dense(numberOfNeuronsPerFCLayer,activation='relu',kernel_regularizer=tf.keras.regularizers.l2(L2Rate)))
-    model.add(keras.layers.Dropout(dropoutRate))
     model.add(keras.layers.Dense(1,activation='sigmoid'))
             
     adamOptimizer = keras.optimizers.legacy.Adam(learning_rate=adamLearningRate)       
@@ -61,12 +59,10 @@ def createTransferableModel(base_model, numberOfNeuronsPerFCLayer, dropoutRate, 
 # In[4]:
 
 
-def createTransferModelParametersDF(n_NeuronsPerFCLayers,n_Epochs,
-                            dropoutRates,adamLearningRates,L2Rates,trainScores,devScores):
+def createTransferModelParametersDF(n_NeuronsPerFCLayers,n_Epochs,adamLearningRates,L2Rates,trainScores,devScores):
     modelParameters = dict()
     modelParameters['n_NeuronsPerFCLayers'] = n_NeuronsPerFCLayers
     modelParameters['n_Epochs'] = n_Epochs
-    modelParameters['dropoutRate'] = dropoutRates
     modelParameters['adamLearningRates'] = adamLearningRates
     modelParameters['L2Rates'] = L2Rates
     modelParameters['trainScore'] = trainScores
@@ -92,14 +88,11 @@ def main():
 
     possibleNeuronsPerLayer = basicUtil.createRangeFromMidpoint(16,32)
     possibleEpochs = basicUtil.createRangeFromMidpoint(5,10)
-
-    dropoutCriticalPoints = (0,1)
     adamLearningRateCriticalPoints = (1e-4,1e-2)
     L2CriticalPoints = (1e-2,1e3) 
 
     n_NeuronsPerFCLayers = []
     n_Epochs = []
-    dropoutRates = []
     adamLearningRates = []
     L2Rates = []
     trainScores = []
@@ -114,10 +107,9 @@ def main():
         numberOfNeuronsPerFCLayer = choose(possibleNeuronsPerLayer)
         numberOfEpochs = choose(possibleEpochs)
         
-        dropoutRate = basicUtil.generateDropoutRate(dropoutCriticalPoints[0],dropoutCriticalPoints[1])
         adamLearningRate = basicUtil.generateAdamLearningRate(adamLearningRateCriticalPoints[0],adamLearningRateCriticalPoints[1])
         L2Rate = basicUtil.generateL2(L2CriticalPoints[0],L2CriticalPoints[1])
-        model = createTransferableModel(base_model, numberOfNeuronsPerFCLayer, dropoutRate, adamLearningRate, L2Rate)
+        model = createTransferableModel(base_model, numberOfNeuronsPerFCLayer, adamLearningRate, L2Rate)
         
         model.fit(train,epochs=numberOfEpochs,verbose=0)
 
@@ -139,7 +131,6 @@ def main():
                 bestModelParams = {
                     'n_NeuronsPerFCLayers' : int(numberOfNeuronsPerFCLayer),
                     'n_Epochs' : int(numberOfEpochs),
-                    'dropoutRate' : dropoutRate,
                     'adamLearningRates' : adamLearningRate,
                     'L2Rates' : L2Rate,
                     'modelSize' : model_size,
@@ -155,7 +146,6 @@ def main():
             n_Epochs.append(numberOfEpochs)
             
             adamLearningRates.append(adamLearningRate)
-            dropoutRates.append(dropoutRate)
             L2Rates.append(L2Rate)
             trainScores.append(trainScore)
             devScores.append(devScore)
@@ -164,8 +154,8 @@ def main():
             trial += 1
         else:
             print(f'redoing trial {trial}. Model was {model_size}MB.')
-            failedTrial = createTransferModelParametersDF([numberOfNeuronsPerFCLayer],[numberOfEpochs],
-                                                  [dropoutRate],[adamLearningRate],[L2Rate],[np.nan],[np.nan])
+            failedTrial = createTransferModelParametersDF([numberOfNeuronsPerFCLayer],[numberOfEpochs],[adamLearningRate],
+                                                          [L2Rate],[np.nan],[np.nan])
             display(failedTrial)
             oversizedNeuronNumbers.append(numberOfNeuronsPerFCLayer)
             oversizedEpochNumbers.append(numberOfEpochs)
@@ -176,8 +166,7 @@ def main():
                 oversizedEpochNumbers = []
             
         if (trial % 10 == 9): 
-            modelParametersDF = createTransferModelParametersDF(n_NeuronsPerFCLayers,n_Epochs,
-                                                    dropoutRates,adamLearningRates,L2Rates,trainScores,devScores)
+            modelParametersDF = createTransferModelParametersDF(n_NeuronsPerFCLayers,n_Epochs,adamLearningRates,L2Rates,trainScores,devScores)
             modelParametersDF = modelParametersDF.sort_values(by='trainScore', ascending=False)
             display(modelParametersDF)
             
@@ -185,13 +174,11 @@ def main():
             possibleNumberOfNeuronsPerFCLayer = basicUtil.getAdjustedRange(top5['n_NeuronsPerFCLayers'])
         
             possibleNumberOfEpochs = basicUtil.getAdjustedRange(top5['n_Epochs'])
-            dropoutCriticalPoints = basicUtil.calculateCriticalPoints(top5['dropoutRate'])
             adamLearningRateCriticalPoints = basicUtil.calculateLogisticCriticalPoints(top5['adamLearningRates'])
             L2CriticalPoints = basicUtil.calculateLogisticCriticalPoints(top5['L2Rates'])
 
             n_NeuronsPerFCLayers = []
             n_Epochs = []
-            dropoutRates = []
             adamLearningRates = []
             L2Rates = []
             trainScores = []
