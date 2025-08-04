@@ -167,3 +167,5 @@ Models/ResnetTrials
 Models/EffecientNetTrials
 .DS_Store
 Src/.DS_Store
+Notebooks/.DS_Store
+certificate.pem
